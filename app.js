@@ -1,72 +1,102 @@
-// app.js - Real Working Version for Android Phone
-document.getElementById('downloadBtn').addEventListener('click', async function() {
-  const url = document.getElementById('videoUrl').value;
-  const format = document.getElementById('format').value;
-  
-  if (!url) {
-    alert('ဗီဒီယိုလင့်ခ်ထည့်ပေးပါ!');
-    return;
-  }
-  
-  // UI အပြောင်းအလဲများ
-  const btn = document.getElementById('downloadBtn');
-  btn.disabled = true;
-  btn.textContent = 'ဒေါင်းလုပ်လုပ်နေသည်...';
-  
+// app.js - Complete Working Version for Spck Editor (Android)
+document.addEventListener('DOMContentLoaded', function() {
+  // UI Elements
+  const downloadBtn = document.getElementById('downloadBtn');
+  const videoUrlInput = document.getElementById('videoUrl');
+  const formatSelect = document.getElementById('format');
   const progressContainer = document.getElementById('progressContainer');
   const progressBar = document.getElementById('progressBar');
   const statusText = document.getElementById('statusText');
-  
-  progressContainer.style.display = 'block';
-  statusText.textContent = 'ပြင်ဆင်နေသည်...';
-  
-  try {
-    // 1. yt-dlp.wasm စစ်ဆေးခြင်း
+  const resultContainer = document.getElementById('resultContainer');
+  const downloadLink = document.getElementById('downloadLink');
+
+  // Check if yt-dlp.wasm is loaded
+  function checkDependencies() {
     if (typeof YtDlp === 'undefined') {
-      throw new Error('အင်တာနက်ချိတ်ဆက်မှုပြဿနာ');
+      throw new Error('yt-dlp.wasm library failed to load. Please check your internet connection.');
     }
-    
-    // 2. Video အချက်အလက်ရယူခြင်း
-    const ytdl = await YtDlp.create();
-    const info = await ytdl.getInfo(url);
-    const cleanTitle = info.title.replace(/[^\w\s]/gi, '').substring(0, 30);
-    
-    // 3. ဒေါင်းလုပ်ရွေးစရာများ
-    const options = {
-      format: format === 'mp3' ? 'bestaudio' : 'best[ext=mp4]',
-      output: `${cleanTitle}.${format}`
-    };
-    
-    // 4. အမှန်တကယ်ဒေါင်းလုပ်လုပ်ခြင်း
-    const result = await ytdl.download(url, options, (progress) => {
-      const percent = Math.round(progress * 100);
-      progressBar.style.width = `${percent}%`;
-      progressBar.textContent = `${percent}%`;
-      statusText.textContent = `ဒေါင်းလုပ်လုပ်နေသည် ${percent}%`;
-    });
-    
-    // 5. File သိမ်းဆည်းနိုင်ရန် ပြင်ဆင်ခြင်း
-    const downloadLink = document.getElementById('downloadLink');
-    const blobUrl = URL.createObjectURL(result.blob);
-    
-    downloadLink.href = blobUrl;
-    downloadLink.download = `${cleanTitle}.${format}`;
-    downloadLink.textContent = `${cleanTitle}.${format} သိမ်းမည်`;
-    downloadLink.onclick = () => {
-      setTimeout(() => {
-        URL.revokeObjectURL(blobUrl); // Memory ရှင်းလင်းခြင်း
-        statusText.textContent = 'သိမ်းဆည်းပြီးပါပြီ!';
-      }, 1000);
-    };
-    
-    document.getElementById('resultContainer').style.display = 'block';
-    
-  } catch (error) {
-    statusText.textContent = `မအောင်မြင်ပါ: ${error.message}`;
-    progressBar.style.background = '#dc3545';
-    console.error('Download error:', error);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'နောက်တစ်ခုဒေါင်းလုပ်လုပ်မည်';
   }
+
+  // Sanitize filename
+  function sanitizeFilename(title) {
+    return title.replace(/[^\w\s-]/gi, '').substring(0, 30);
+  }
+
+  // Download handler
+  downloadBtn.addEventListener('click', async function() {
+    const url = videoUrlInput.value.trim();
+    const format = formatSelect.value;
+
+    // Validation
+    if (!url) {
+      alert('YouTube video URL ထည့်ပေးပါ!');
+      return;
+    }
+
+    try {
+      // UI Updates
+      downloadBtn.disabled = true;
+      downloadBtn.textContent = 'Processing...';
+      progressContainer.style.display = 'block';
+      statusText.textContent = 'Initializing...';
+
+      // Check dependencies
+      checkDependencies();
+
+      // Initialize yt-dlp
+      statusText.textContent = 'Loading yt-dlp...';
+      const ytdl = await YtDlp.create();
+
+      // Get video info
+      statusText.textContent = 'Fetching video info...';
+      const info = await ytdl.getInfo(url);
+      const cleanTitle = sanitizeFilename(info.title);
+      const filename = `${cleanTitle}.${format}`;
+
+      // Download options
+      const options = {
+        format: format === 'mp3' ? 'bestaudio/best' : 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        output: filename
+      };
+
+      // Start download
+      statusText.textContent = 'Starting download...';
+      const result = await ytdl.download(url, options, (progress) => {
+        const percent = Math.round(progress * 100);
+        progressBar.style.width = `${percent}%`;
+        progressBar.textContent = `${percent}%`;
+        statusText.textContent = `Downloading... ${percent}%`;
+      });
+
+      // Create download link
+      const blobUrl = URL.createObjectURL(result.blob);
+      downloadLink.href = blobUrl;
+      downloadLink.download = filename;
+      downloadLink.textContent = `Save: ${filename}`;
+      
+      // Clean up memory after download
+      downloadLink.addEventListener('click', function() {
+        setTimeout(() => {
+          URL.revokeObjectURL(blobUrl);
+          statusText.textContent = 'Download completed!';
+        }, 1000);
+      });
+
+      // Show result
+      resultContainer.style.display = 'block';
+      statusText.textContent = 'Ready to download!';
+
+    } catch (error) {
+      console.error('Error:', error);
+      statusText.textContent = `Error: ${error.message}`;
+      progressBar.style.backgroundColor = '#ff4444';
+      
+    } finally {
+      downloadBtn.disabled = false;
+      downloadBtn.textContent = 'Download Again';
+    }
+  });
+
+  // Initialize status
+  statusText.textContent = 'Enter YouTube URL and click Download';
 });
